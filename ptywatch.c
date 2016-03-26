@@ -16,25 +16,29 @@
 #include "common.h"
 #include "config.h"
 #include "error.h"
+#include "plugin.h"
 
 struct PtyWatch
 {
-	SInt32		fdsig;
-	sigset_t	default_signal_set;
+	SInt32			nplugins;
+	struct PtyWatch_Plugin	**plugins;
 
-	SInt32		fdtimer;
+	SInt32			fdsig;
+	sigset_t		default_signal_set;
 
-	SInt32		fdmaster;
-	SInt32		fdslave;
+	SInt32			fdtimer;
 
-	struct pollfd	pfds[3];
-	SInt32		quit;
+	SInt32			fdmaster;
+	SInt32			fdslave;
 
-	char		*msg;
-			/* Message length without trailing zero. (msglen + 1) <= msgcap.
-			 */
-	SInt64		msglen;
-	SInt64		msgcap;
+	struct pollfd		pfds[3];
+	SInt32			quit;
+
+	char			*msg;
+				/* Message length without trailing zero. (msglen + 1) <= msgcap.
+				 */
+	SInt64			msglen;
+	SInt64			msgcap;
 };
 
 static SInt32 Init_Signal_Handling(struct PtyWatch *self)
@@ -99,8 +103,54 @@ static SInt32 Destroy_Timer(struct PtyWatch *self)
 	return 0;
 }
 
+static SInt32 Load_All_Plugins(struct PtyWatch *self, SInt32 nplugins, const char **paths)
+{
+	SInt32 i, err;
+
+	self->nplugins = nplugins;
+
+	if (0 == nplugins)
+		return 0;
+
+	self->plugins  = malloc(self->nplugins*sizeof(struct PtyWatch_Plugin *));
+	if (UNLIKELY(!self->nplugins)) {
+		PTYWATCH_FATAL("malloc() failed");
+		return -ENOMEM;
+	}
+
+	for (i = 0; i < self->nplugins; ++i) {
+		err = Load_Plugin(paths[i], &self->plugins[i]);
+		if (UNLIKELY(err)) {
+			PTYWATCH_ERROR("Failed to load plugin '%s'", paths[i]);
+			self->plugins[i] = NULL;
+		}
+	}
+
+	return 0;
+}
+
+static SInt32 Unload_All_Plugins(struct PtyWatch *self)
+{
+	SInt32 i, err;
+
+	for (i = 0; i < self->nplugins; ++i) {
+		if (UNLIKELY(!self->plugins[i]))
+			continue;
+
+		err = Unload_Plugin(self->plugins[i]);
+		if (UNLIKELY(err)) {
+			PTYWATCH_ERROR("Failed to unload plugin number %d", i);
+		}
+		self->plugins[i] = NULL;
+	}
+
+	free(self->plugins);
+
+	return 0;
+}
+
 /* In order to receive wall messages we require an utmp file entry. We use libutempter to
- * do the job so that we do not have to worry about access permissions to /var/run/utmp. 
+ * do the job so that we do not have to worry about access permissions to /var/run/utmp.
  * libutempter uses a seperate program (/usr/libexec/utempter/utempter on Fedora and RHEL)
  * to add and remove entries.
  */
@@ -149,6 +199,29 @@ static SInt32 Empty_Msg(struct PtyWatch *self)
 	return 0;
 }
 
+static SInt32 Send_Msg(struct PtyWatch *self)
+{
+	SInt32 i;
+	SInt32 retval;
+	SInt32 err;
+
+	retval = 0;
+
+	for (i = 0; i < self->nplugins; ++i) {
+		if (UNLIKELY(!self->plugins[i]))
+			continue;
+
+		err = self->plugins[i]->Send_Msg(self->plugins[i], self->msg, self->msglen);
+		if (UNLIKELY(err)) {
+			PTYWATCH_ERROR("Send_Msg() of plugin '%s' failed with error %d", 
+			               self->plugins[i]->name, err);
+			retval = err;
+		}
+	}
+
+	return retval;
+}
+
 static SInt32 Append_To_Msg(struct PtyWatch *self, const char *buf, SInt64 len)
 {
 	if ((self->msglen + len + 1) >= self->msgcap) {
@@ -172,7 +245,7 @@ static SInt32 Append_To_Msg(struct PtyWatch *self, const char *buf, SInt64 len)
 	return 0;
 }
 
-static SInt32 Init(struct PtyWatch *self)
+static SInt32 Init(struct PtyWatch *self, SInt32 argc, const char **argv)
 {
 	SInt32 err;
 
@@ -198,6 +271,10 @@ static SInt32 Init(struct PtyWatch *self)
 	if (UNLIKELY(err))
 		return err;
 
+	err = Load_All_Plugins(self, argc - 1, argv + 1);
+	if (UNLIKELY(err))
+		return err;
+
 	return 0;
 }
 
@@ -206,6 +283,7 @@ static void Fini(struct PtyWatch *self)
 	(void )Remove_From_Utmp_Database(self);
 	(void )Destroy_Timer(self);
 	(void )Fini_Signal_Handling(self);
+	(void )Unload_All_Plugins(self);
 }
 
 static SInt32 Fill_Pollfds(struct PtyWatch *self)
@@ -218,9 +296,10 @@ static SInt32 Fill_Pollfds(struct PtyWatch *self)
 	self->pfds[1].fd     = self->fdmaster;
 	self->pfds[1].events = POLLIN;
 
-	/* TODO Handle timer. */
+	self->pfds[2].fd     = self->fdtimer;
+	self->pfds[2].events = POLLIN;
 
-	return 2;
+	return 3;
 }
 
 static SInt32 Handle_Sigquit(struct PtyWatch *self, SInt32 signo)
@@ -328,9 +407,11 @@ static SInt32 Handle_Timer(struct PtyWatch *self, _Bool ignore)
 		PTYWATCH_ERROR("Disarm_Timer() failed");
 	}
 
-	/* TODO Notification.
-	 */
-	fprintf(stdout, self->msg);
+	err = Send_Msg(self);
+	if (UNLIKELY(err)) {
+		PTYWATCH_ERROR("Send_Msg() failed");
+		return err;
+	}
 
 	err = Empty_Msg(self);
 	if (UNLIKELY(err)) {
@@ -384,7 +465,7 @@ int main(int argc, char **argv)
 
 	memset(&ptywatch, 0, sizeof(struct PtyWatch));
 
-	err = Init(&ptywatch);
+	err = Init(&ptywatch, argc, (const char **)argv);
 	if (UNLIKELY(err)) {
 		PTYWATCH_FATAL("Setup() failed");
 		return err;
