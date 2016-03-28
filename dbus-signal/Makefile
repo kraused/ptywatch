@@ -1,6 +1,6 @@
 
 CC       = gcc
-CPPFLAGS = -I. -I.. -D_GNU_SOURCE
+CPPFLAGS = -I. -I.. -D_GNU_SOURCE -DNDEBUG=1
 CCFLAGS  = -Wall -O0 -ggdb -fPIC `pkg-config --cflags gio-2.0` `pkg-config --cflags gio-unix-2.0` `pkg-config --cflags glib-2.0`
 LD       = gcc
 LDFLAGS  = -O0 -ggdb -fPIC -Wl,-export-dynamic
