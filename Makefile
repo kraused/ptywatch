@@ -14,7 +14,7 @@ all: ptywatch.exe plugins/stdout.so plugins/libnotify.so
 
 ptywatch.exe: ptywatch.o plugin.o error.o
 	$(Q)$(LD) $(LDFLAGS) -o $@ $^ $(LIBS)
-	@echo "LD  $@"
+	@echo "LD $@"
 
 plugins/libnotify.o: plugins/libnotify.c
 	$(Q)$(CC) $(CPPFLAGS) $(CCFLAGS) `pkg-config --cflags glib-2.0` `pkg-config --cflags gdk-pixbuf-2.0` -o $@ -c $<

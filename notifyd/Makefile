@@ -14,7 +14,7 @@ all: notifyd.exe
 
 notifyd.exe: notifications.o notifyd.o ../error.o
 	$(Q)$(LD) $(LDFLAGS) -o $@ $^ $(LIBS)
-	@echo "LD  $@"
+	@echo "LD $@"
 
 %.o: %.c
 	$(Q)$(CC) $(CPPFLAGS) $(CCFLAGS) -o $@ -c $<

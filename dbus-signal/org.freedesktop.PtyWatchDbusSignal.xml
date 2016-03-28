@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<node name="/org/freedesktop/PtyWatchDbusSignal">
+	<interface name="org.freedesktop.PtyWatchDbusSignal">
+		<signal name="Message">
+			<arg name="summary"	type="s"/>
+			<arg name="body"	type="s"/>
+		</signal>
+	</interface>
+</node>
