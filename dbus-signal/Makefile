@@ -27,6 +27,12 @@ wait4signal.exe: wait4signal.o ../error.o
 ptywatch-dbus-signal.c: org.freedesktop.PtyWatchDbusSignal.xml
 	gdbus-codegen --generate-c-code ptywatch-dbus-signal --interface-prefix org.freedesktop $<
 
+install:
+	install -m0755 -d $(PREFIX)/usr/bin/
+	install -m0755 -d $(PREFIX)/usr/libexec/ptywatch/
+	install -m0755 wait4signal.exe	$(PREFIX)/usr/bin/wait4signal.exe
+	install -m0755 dbus-signal.so	$(PREFIX)/usr/libexec/ptywatch/dbus-signal.so
+
 clean:
 	-rm -f *.o dbus-signal.so wait4signal.exe
 
