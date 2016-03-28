@@ -1,4 +1,7 @@
 
+VERSION    = 1
+PATCHLEVEL = 0
+
 CC       = gcc
 CPPFLAGS = -I. -D_GNU_SOURCE
 CCFLAGS  = -Wall -O0 -ggdb -fPIC
@@ -24,6 +27,9 @@ plugins/libnotify.so: plugins/libnotify.o error.o
 	$(Q)$(CC) $(LDFLAGS) `pkg-config --libs glib-2.0` -lnotify -shared -o $@ $<
 	@echo "CC $@"
 
+dbus-signal.so:
+	make -C dbus-signal
+
 %.o: %.c
 	$(Q)$(CC) $(CPPFLAGS) $(CCFLAGS) -o $@ -c $<
 	@echo "CC $@"
@@ -31,6 +37,13 @@ plugins/libnotify.so: plugins/libnotify.o error.o
 %.so: %.o error.o
 	$(Q)$(CC) $(LDFLAGS) -shared -o $@ $<
 	@echo "CC $@"
+
+tar:
+	python2 tar.py ptywatch $(VERSION).$(PATCHLEVEL)
+
+install:
+	install -m0755 -d $(PREFIX)/usr/sbin/
+	install -m0755 ptywatch.exe		$(PREFIX)/usr/sbin/ptywatch.exe
 
 clean:
 	-rm -f *.o plugins/*.o plugins/*.so ptywatch.exe
