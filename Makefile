@@ -44,8 +44,10 @@ tar:
 install:
 	install -m0755 -d $(PREFIX)/usr/sbin/
 	install -m0755 -d $(PREFIX)/usr/libexec/ptywatch/
+	install -m0755 -d $(PREFIX)/usr/lib/systemd/system/
 	install -m0755 ptywatch.exe		$(PREFIX)/usr/sbin/ptywatch.exe
 	install -m0755 plugins/libnotify.so	$(PREFIX)/usr/libexec/ptywatch/libnotify.so
+	install -m0644 ptywatch.service		$(PREFIX)/usr/lib/systemd/system/ptywatch.service
 	make -C dbus-signal PREFIX=$(PREFIX) install
 
 clean:
