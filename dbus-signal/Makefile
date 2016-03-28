@@ -4,7 +4,7 @@ CPPFLAGS = -I. -I.. -D_GNU_SOURCE
 CCFLAGS  = -Wall -O0 -ggdb -fPIC `pkg-config --cflags gio-2.0` `pkg-config --cflags gio-unix-2.0` `pkg-config --cflags glib-2.0`
 LD       = gcc
 LDFLAGS  = -O0 -ggdb -fPIC -Wl,-export-dynamic
-LIBS     = `pkg-config --libs gio-2.0` `pkg-config --libs gio-unix-2.0` `pkg-config --libs glib-2.0` 
+LIBS     = `pkg-config --libs gio-2.0` `pkg-config --libs gio-unix-2.0` `pkg-config --libs glib-2.0` -lpthread
 
 Q = @
 
