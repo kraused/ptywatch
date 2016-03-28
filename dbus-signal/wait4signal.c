@@ -13,6 +13,7 @@
 
 struct Message
 {
+	char	*argv0;
 	char	*origin;
 	char	*summary;
 	char	*body;
@@ -22,12 +23,49 @@ void *Thread_Start_Routine(void *arg)
 {
 	struct Message *msg = (struct Message *)arg;
 
-        fprintf(stdout, "Origin : %s\n", msg->origin);
-        fprintf(stdout, "Summary: %s\n", msg->summary);
+#if !defined(NDEBUG)
+        fprintf(stderr, "Origin : %s\n", msg->origin);
+        fprintf(stderr, "Summary: %s\n", msg->summary);
 	/* +1 to get rid of the prepended \r of the wall message.
 	 */
-        fprintf(stdout, "Body   : \"%s\"\n", msg->body + 1);
+        fprintf(stderr, "Body   : \"%s\"\n", msg->body + 1);
+#endif
 
+	GSubprocess *proc;
+	gboolean success;
+	GError *error;
+	GBytes *buf;
+
+	error = NULL;
+	proc  = g_subprocess_new(G_SUBPROCESS_FLAGS_STDIN_PIPE | G_SUBPROCESS_FLAGS_STDOUT_SILENCE | G_SUBPROCESS_FLAGS_STDERR_SILENCE,
+	                         &error,
+	                         (char *)msg->argv0,
+	                         "--origin", msg->origin,
+	                         "--summary", msg->summary,
+	                         NULL);
+	if (UNLIKELY(!proc)) {
+		PTYWATCH_ERROR("g_subprocess_new() failed: %s\n", error->message);
+		g_error_free(error);
+	}
+
+	buf = g_bytes_new(msg->body, strlen(msg->body));
+
+	error   = NULL;
+	success = g_subprocess_communicate(proc,
+	                                   buf,
+	                                   NULL,
+	                                   NULL,
+	                                   NULL,
+	                                   &error);
+	if (UNLIKELY((!success) && error)) {
+		PTYWATCH_ERROR("g_subprocess_communicate() failed: %s\n", error->message);
+		g_error_free(error);
+	}
+
+	g_object_unref(G_OBJECT(proc));
+	g_bytes_unref(buf);
+
+	free(msg->argv0);
 	free(msg->origin);
 	free(msg->summary);
 	free(msg->body);
@@ -93,6 +131,7 @@ void On_Caught_Signal(GDBusConnection *connection,
 		return;
 	}
 
+	msg->argv0   = strdup((char *)user_data);
 	msg->origin  = strdup(object_path);
 	msg->summary = strdup(g_variant_get_string(summary, NULL));
 	msg->body    = strdup(g_variant_get_string(body, NULL));
@@ -128,7 +167,7 @@ int main(int argc, char **argv)
 	                                            NULL, /* arg0 */
 	                                            G_DBUS_SIGNAL_FLAGS_NONE,
 	                                            On_Caught_Signal,
-	                                            NULL,
+	                                            argv[1],
 	                                            NULL);
 
 	g_main_loop_run(loop);
