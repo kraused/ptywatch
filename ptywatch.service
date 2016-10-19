@@ -1,7 +1,6 @@
 [Unit]
 Description=ptywatch service
 After=local-fs.target
-Wants=syslog.target
 
 [Service]
 Type=simple
